@@ -45,10 +45,10 @@ db.connect((err) => {
 });
 
 // Configuración de Auth0
-const auth0Domain = 'YOUR_AUTH0_DOMAIN'; // Reemplazar con tu dominio Auth0
-const auth0ClientId = 'YOUR_AUTH0_CLIENT_ID'; // Reemplazar con tu Client ID de Auth0
-const auth0ClientSecret = 'YOUR_AUTH0_CLIENT_SECRET'; // Reemplazar con tu Client Secret de Auth0
-const auth0Audience = 'YOUR_AUTH0_API_IDENTIFIER'; // Reemplazar con el Identificador de tu API
+const auth0Domain = 'prod-bwbqs8n8.us.auth0.com'; // Reemplazar con tu dominio Auth0
+const auth0ClientId = '2tGJL6SRN8gu8oFwAIZd5brmFQ4Tn2IV'; // Reemplazar con tu Client ID de Auth0
+const auth0ClientSecret = 'B0ljIrMbT6xccJEtMLBOoMgKYytOEffYkgOpFgaB-x9Z4sdUnkPDV_hTtwC6-FTn'; // Reemplazar con tu Client Secret de Auth0
+const auth0Audience = 'https://prod-bwbqs8n8.us.auth0.com/api/v2/'; // Reemplazar con el Identificador de tu API
 
 // Obtener token de acceso de Auth0
 async function getAuth0Token() {
@@ -59,6 +59,7 @@ async function getAuth0Token() {
             audience: auth0Audience,
             grant_type: 'client_credentials'
         });
+        console.log('Auth0 token:', response.data.access_token);
         return response.data.access_token;
     } catch (error) {
         console.error('Error getting Auth0 token:', error);
@@ -76,6 +77,7 @@ async function getAuth0UserByEmail(token, email) {
                 email: email
             }
         });
+        console.log('Auth0 user by email:', response.data[0]);
         return response.data[0]; // Retorna el primer usuario encontrado
     } catch (error) {
         console.error('Error getting Auth0 user by email:', error);

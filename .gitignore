@@ -1,0 +1,6 @@
+
+# dependencies
+/node_modules
+/modules
+/.pnp
+.pnp.js
