@@ -8,7 +8,7 @@ const axios = require('axios');
 const jwt = require('jsonwebtoken');
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT ?? 3000;
 
 // Configuración de almacenamiento para Multer
 const storage = multer.diskStorage({
