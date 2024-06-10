@@ -250,7 +250,7 @@ app.get('/users/search', (req, res) => {
 app.get('/users/update-metadata', async (req, res) => {
     try {
         // Lógica para leer datos de MySQL
-        const query = 'SELECT email, axx_genero FROM user';
+        const query = 'SELECT * FROM user';
         db.query(query, async (err, results) => {
             if (err) {
                 console.error('Error reading data from MySQL:', err);
