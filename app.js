@@ -107,6 +107,58 @@ function getGender(genderCode) {
     }
 }
 
+// Función para convertir el formato de fecha (DD/MM/YYYY) a (YYYY-MM-DD HH:mm:ss)
+function formatDate(dateString) {
+    const parts = dateString.split('/');
+    if (parts.length === 3) {
+        const year = parts[2];
+        const month = parts[1].padStart(2, '0'); // Asegurar que el mes tenga dos dígitos
+        const day = parts[0].padStart(2, '0'); // Asegurar que el día tenga dos dígitos
+        // Establecer la hora y los minutos a cero
+        const hour = '00';
+        const minute = '00';
+        const second = '00';
+        return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+    }
+    return null;
+}
+
+// Función para obtener todos los registros de la tabla user
+async function getAllUsers() {
+    return new Promise((resolve, reject) => {
+        const query = 'SELECT * FROM user';
+        db.query(query, (err, results) => {
+            if (err) {
+                console.error('Error fetching data from user table:', err);
+                reject(err);
+            } else {
+                resolve(results);
+            }
+        });
+    });
+}
+
+// Función para encontrar un usuario en la tabla auth0_user
+async function findMatchingAuth0User(email, taxvat) {
+    return new Promise((resolve, reject) => {
+        const query = 'SELECT * FROM auth0_user WHERE Email = ? AND taxvat = ?';
+        const values = [email, taxvat];
+        db.query(query, values, (err, results) => {
+            if (err) {
+                console.error('Error finding matching user in auth0_user table:', err);
+                reject(err);
+            } else {
+                if (results.length > 0) {
+                    resolve(results[0]); // Retorna el primer usuario encontrado
+                } else {
+                    resolve(null); // Retorna null si no se encuentra ningún usuario
+                }
+            }
+        });
+    });
+}
+
+
 // Función para actualizar el metadata del usuario en Auth0
 async function updateAuth0UserMetadata(token, userId, gender, crmId, firstName, lastName, birthDate, axxNrodocumento, suscActivas) {
     try {
@@ -157,6 +209,125 @@ app.get('/users/create-table-users', (req, res) => {
         res.send('Table `user` created or already exists.');
     });
 });
+
+//Ruta para crear la tabla de usuarios Auth0 en MySQL
+app.get('/users/create-table-auth0-users', (req, res) => {
+    const query = `
+        CREATE TABLE IF NOT EXISTS auth0_user (
+            first_name VARCHAR(255),
+            last_name VARCHAR(255),
+            gender VARCHAR(255),
+            birthday DATETIME,
+            taxvat VARCHAR(255),
+            taxvat_type VARCHAR(255),
+            crm_id VARCHAR(255),
+            Id VARCHAR(255) PRIMARY KEY,
+            Given_Name VARCHAR(255),
+            Family_Name VARCHAR(255),
+            Nickname VARCHAR(255),
+            Name VARCHAR(255),
+            Email VARCHAR(255),
+            Email_Verified BOOLEAN,
+            Created_At DATETIME,
+            Updated_At DATETIME
+        )
+    `;
+    db.query(query, (err, result) => {
+        if (err) {
+            console.error('Error creating table:', err);
+            return res.status(500).send('Error creating table.');
+        }
+        console.log('Table `auth0_user` created or already exists.');
+        res.send('Table `auth0_user` created or already exists.');
+    }
+    );
+});
+
+// Ruta para subir el archivo CSV a la tabla auth0_user
+app.post('/users/upload-file-auth0', upload.single('file'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).send('No file uploaded.');
+    }
+
+    const filePath = req.file.path;
+    const results = [];
+
+    fs.createReadStream(filePath)
+        .pipe(csv({ separator: ',' }))
+        .on('data', (data) => results.push(data))
+        .on('end', async () => {
+            for (const row of results) {
+                // Remover comillas simples de los valores
+                Object.keys(row).forEach(key => {
+                    row[key] = row[key].replace(/^'+|'+$/g, '');
+                });
+
+                const {
+                    first_name,
+                    last_name,
+                    gender,
+                    birthday,
+                    taxvat,
+                    taxvat_type,
+                    crm_id,
+                    Id,
+                    'Given Name': Given_Name,
+                    'Family Name': Family_Name,
+                    Nickname,
+                    Name,
+                    Email,
+                    'Email Verified': Email_Verified,
+                    'Created At': Created_At,
+                    'Updated At': Updated_At
+                } = row;
+
+                // Validar que los campos necesarios no sean nulos
+                if (!Id || !Email) {
+                    console.error('Missing required data: Id or Email is null');
+                    continue; // Saltar esta fila si falta datos necesarios
+                }
+                
+                // Convertir el formato de fecha (DD/MM/YYYY) a (YYYY-MM-DD)
+                const formattedBirthday = birthday ? formatDate(birthday) : null;
+
+                // Convertir el género a un formato estandarizado (1 -> Masculino, 2 -> Femenino)
+                const formattedGender = gender ? getGender(gender) : null;
+
+                const query = `INSERT INTO auth0_user (
+                    first_name, last_name, gender, birthday, taxvat, taxvat_type, crm_id, Id, Given_Name, Family_Name, Nickname, Name, Email, Email_Verified, Created_At, Updated_At
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+                db.query(query, [
+                    first_name || null,
+                    last_name || null,
+                    formattedGender,
+                    formattedBirthday,
+                    taxvat || null,
+                    taxvat_type || null,
+                    crm_id || null,
+                    Id,
+                    Given_Name || null,
+                    Family_Name || null,
+                    Nickname || null,
+                    Name || null,
+                    Email,
+                    Email_Verified === 'true', // Convertir a booleano
+                    Created_At ? new Date(Created_At) : null,
+                    Updated_At ? new Date(Updated_At) : null
+                ], (err, results) => {
+                    if (err) {
+                        console.error('Error inserting data:', err);
+                    } else {
+                        console.log('Data inserted successfully for Id:', Id);
+                    }
+                });
+            }
+
+            fs.unlinkSync(filePath); // Elimina el archivo después de procesarlo
+            res.send('Archivo CSV subido y datos insertados en la base de datos "auth0_user".');
+        });
+});
+
 
 
 // Ruta para subir el archivo CSV
@@ -273,6 +444,34 @@ app.get('/users/search', (req, res) => {
     });
 });
 
+// Ruta para filtrar la tabla user y encontrar coincidencias en la tabla auth0_user
+app.get('/users/filter-and-find', async (req, res) => {
+    try {
+        // Obtener todos los registros de la tabla user
+        const users = await getAllUsers();
+
+        // Array para almacenar los resultados filtrados
+        const filteredResults = [];
+
+        // Recorrer los registros de user
+        for (const user of users) {
+            console.log('User:', user);
+            const { email, axx_nrodocumento } = user;
+            // Buscar coincidencias en la tabla auth0_user
+            const auth0User = await findMatchingAuth0User(email, axx_nrodocumento);
+            if (auth0User) {
+                filteredResults.push(user);
+            }
+        }
+
+        res.json(filteredResults); // Retorna los resultados filtrados
+    } catch (error) {
+        console.error('Error filtering and finding data:', error);
+        res.status(500).send('Error filtering and finding data.');
+    }
+});
+
+
 // Ruta para leer datos de MySQL y buscar en Auth0 para actualizar metadata
 app.get('/users/update-metadata', async (req, res) => {
     try {
@@ -329,6 +528,19 @@ app.post('/users/clear-table', (req, res) => {
         }
         console.log('Tabla user limpiada.');
         res.send('Tabla user limpiada.');
+    });
+});
+
+// Ruta para limpiar la tabla auth0_user de MySQL
+app.post('/users/clear-table-auth0', (req, res) => {
+    const query = 'TRUNCATE TABLE auth0_user';
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error('Error truncating table:', err);
+            return res.status(500).send('Error truncating table.');
+        }
+        console.log('Tabla auth0_user limpiada.');
+        res.send('Tabla auth0_user limpiada.');
     });
 });
 
