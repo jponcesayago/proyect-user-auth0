@@ -217,7 +217,7 @@ app.get('/users/create-table-auth0-users', (req, res) => {
             first_name VARCHAR(255),
             last_name VARCHAR(255),
             gender VARCHAR(255),
-            birthday DATETIME,
+            birthday VARCHAR(255),
             taxvat VARCHAR(255),
             taxvat_type VARCHAR(255),
             crm_id VARCHAR(255),
@@ -287,11 +287,6 @@ app.post('/users/upload-file-auth0', upload.single('file'), async (req, res) => 
                     continue; // Saltar esta fila si falta datos necesarios
                 }
                 
-                // Convertir el formato de fecha (DD/MM/YYYY) a (YYYY-MM-DD)
-                const formattedBirthday = birthday ? formatDate(birthday) : null;
-
-                // Convertir el género a un formato estandarizado (1 -> Masculino, 2 -> Femenino)
-                const formattedGender = gender ? getGender(gender) : null;
 
                 const query = `INSERT INTO auth0_user (
                     first_name, last_name, gender, birthday, taxvat, taxvat_type, crm_id, Id, Given_Name, Family_Name, Nickname, Name, Email, Email_Verified, Created_At, Updated_At
@@ -300,8 +295,8 @@ app.post('/users/upload-file-auth0', upload.single('file'), async (req, res) => 
                 db.query(query, [
                     first_name || null,
                     last_name || null,
-                    formattedGender,
-                    formattedBirthday,
+                    gender || null,
+                    birthday || null,
                     taxvat || null,
                     taxvat_type || null,
                     crm_id || null,
