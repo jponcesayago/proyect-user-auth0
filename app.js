@@ -107,21 +107,6 @@ function getGender(genderCode) {
     }
 }
 
-// Función para convertir el formato de fecha (DD/MM/YYYY) a (YYYY-MM-DD HH:mm:ss)
-function formatDate(dateString) {
-    const parts = dateString.split('/');
-    if (parts.length === 3) {
-        const year = parts[2];
-        const month = parts[1].padStart(2, '0'); // Asegurar que el mes tenga dos dígitos
-        const day = parts[0].padStart(2, '0'); // Asegurar que el día tenga dos dígitos
-        // Establecer la hora y los minutos a cero
-        const hour = '00';
-        const minute = '00';
-        const second = '00';
-        return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
-    }
-    return null;
-}
 
 // Función para obtener todos los registros de la tabla user
 async function getAllUsers() {
@@ -139,10 +124,10 @@ async function getAllUsers() {
 }
 
 // Función para encontrar un usuario en la tabla auth0_user
-async function findMatchingAuth0User(email, taxvat) {
+async function findMatchingAuth0User(taxvat) {
     return new Promise((resolve, reject) => {
-        const query = 'SELECT * FROM auth0_user WHERE Email = ? AND taxvat = ?';
-        const values = [email, taxvat];
+        const query = 'SELECT * FROM auth0_user WHERE taxvat = ?';
+        const values = [taxvat];
         db.query(query, values, (err, results) => {
             if (err) {
                 console.error('Error finding matching user in auth0_user table:', err);
@@ -193,7 +178,7 @@ app.get('/users/create-table-users', (req, res) => {
             last_name VARCHAR(100),
             gender_code VARCHAR(10),
             axx_genero INT,
-            birth_date DATETIME,
+            birth_date VARCHAR(255),
             axx_tipodocumento VARCHAR(50),
             axx_nrodocumento VARCHAR(50),
             q_susc_activas INT
@@ -354,9 +339,22 @@ app.post('/users/upload-file', upload.single('file'), async (req, res) => {
 
                 const query = 'INSERT INTO user (contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
-                db.query(query, [ContactId, EMailAddress1, FirstName, LastName, GenderCode, axx_genero, BirthDate, axx_tipodocumento, axx_nrodocumento, q_susc_activas], (err, results) => {
+                db.query(query, [
+                    ContactId || null,
+                    EMailAddress1 || null,
+                    FirstName || null,
+                    LastName || null,
+                    GenderCode || null,
+                    axx_genero || null,
+                    BirthDate || null,
+                    axx_tipodocumento || null,
+                    axx_nrodocumento || null,
+                    q_susc_activas || null
+                ], (err, results) => {
                     if (err) {
                         console.error('Error inserting data:', err);
+                    } else {
+                        console.log('Data inserted successfully for ContactId:', ContactId);
                     }
                 });
             }
@@ -451,9 +449,9 @@ app.get('/users/filter-and-find', async (req, res) => {
         // Recorrer los registros de user
         for (const user of users) {
             console.log('User:', user);
-            const { email, axx_nrodocumento } = user;
+            const { axx_nrodocumento } = user;
             // Buscar coincidencias en la tabla auth0_user
-            const auth0User = await findMatchingAuth0User(email, axx_nrodocumento);
+            const auth0User = await findMatchingAuth0User( axx_nrodocumento);
             if (auth0User) {
                 filteredResults.push(user);
             }
