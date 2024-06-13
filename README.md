@@ -17,4 +17,9 @@ Una aplicación Node.js para manejar la autenticación y la sincronización de u
    ```bash
    git clone https://github.com/tu-usuario/proyect-user-auth0.git
    cd proyect-user-auth0
-npm install
+   ```
+   
+2. Instala las dependencias:
+   ```bash
+   npm install
+   ```
