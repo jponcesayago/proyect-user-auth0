@@ -66,39 +66,33 @@ POST /users/upload-file-auth0
 ````
 
 Otras rutas
-Listar usuarios: GET /users
-Buscar usuario en Auth0 por email: GET /users/auth0-search?email={email}
-Buscar usuario en MySQL por email o DNI: GET /users/search?email={email}&dni={dni}
-Filtrar y encontrar coincidencias entre las tablas: GET /users/filter-and-find
-Actualizar metadata de usuarios en Auth0: GET /users/update-metadata
-Limpiar tabla user: POST /users/clear-table
-Limpiar tabla auth0_user: POST /users/clear-table-auth0
+# Listar usuarios: GET /users
+# Buscar usuario en Auth0 por email: GET /users/auth0-search?email={email}
+# Buscar usuario en MySQL por email o DNI: GET /users/search?email={email}&dni={dni}
+# Filtrar y encontrar coincidencias entre las tablas: GET /users/filter-and-find
+# Actualizar metadata de usuarios en Auth0: GET /users/update-metadata
+# Limpiar tabla user: POST /users/clear-table
+# Limpiar tabla auth0_user: POST /users/clear-table-auth0
+
 Características
-Sincronización de usuarios entre una base de datos MySQL y Auth0.
-Subida de archivos CSV para poblar las tablas de usuarios.
-Búsqueda y actualización de usuarios en Auth0.
-Funcionalidades para crear y limpiar tablas en la base de datos.
-Rutas de la API
-Crear tablas
-GET /users/create-table-users: Crear la tabla user en MySQL.
-GET /users/create-table-auth0-users: Crear la tabla auth0_user en MySQL.
+1. Sincronización de usuarios entre una base de datos MySQL y Auth0.
+2. Subida de archivos CSV para poblar las tablas de usuarios.
+3. Búsqueda y actualización de usuarios en Auth0.
+4. Funcionalidades para crear y limpiar tablas en la base de datos.
+5. Rutas de la API
+6. Crear tablas
+# GET /users/create-table-users: Crear la tabla user en MySQL.
+# GET /users/create-table-auth0-users: Crear la tabla auth0_user en MySQL.
 Subir archivos CSV
-POST /users/upload-file: Subir archivo CSV para la tabla user.
-POST /users/upload-file-auth0: Subir archivo CSV para la tabla auth0_user.
+# POST /users/upload-file: Subir archivo CSV para la tabla user.
+# POST /users/upload-file-auth0: Subir archivo CSV para la tabla auth0_user.
 Obtener y buscar usuarios
-GET /users: Obtener todos los usuarios de la tabla user.
-GET /users/auth0-search: Buscar usuario en Auth0 por email.
-GET /users/search: Buscar usuario en MySQL por email o DNI.
-GET /users/filter-and-find: Filtrar la tabla user y encontrar coincidencias en la tabla auth0_user.
+# GET /users: Obtener todos los usuarios de la tabla user.
+# GET /users/auth0-search: Buscar usuario en Auth0 por email.
+# GET /users/search: Buscar usuario en MySQL por email o DNI.
+# GET /users/filter-and-find: Filtrar la tabla user y encontrar coincidencias en la tabla auth0_user.
 Actualizar metadata y limpiar tablas
-GET /users/update-metadata: Actualizar metadata de usuarios en Auth0.
-POST /users/clear-table: Limpiar la tabla user en MySQL.
-POST /users/clear-table-auth0: Limpiar la tabla auth0_user en MySQL.
-Contribución
-Haz un fork del proyecto.
-Crea una nueva rama (git checkout -b nueva-caracteristica).
-Confirma tus cambios (git commit -m 'Añadir nueva característica').
-Haz push a la rama (git push origin nueva-caracteristica).
-Crea un Pull Request.
-Licencia
-Este proyecto está licenciado bajo la Licencia ISC. Ver el archivo LICENSE para más detalles.
+# GET /users/update-metadata: Actualizar metadata de usuarios en Auth0.
+# POST /users/clear-table: Limpiar la tabla user en MySQL.
+# POST /users/clear-table-auth0: Limpiar la tabla auth0_user en MySQL.
+
