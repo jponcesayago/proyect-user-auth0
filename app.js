@@ -181,6 +181,22 @@ async function updateAuth0UserMetadata(token, userId, crmId, firstName, lastName
         console.error(`Error updating user metadata for Auth0 user ${userId}:`, error);
     }
 }
+// Función para actualizar el metadata del usuario en Auth0 solo genero
+async function updateAuth0UserMetadataGender(token, userId, gender) {
+    try {
+        await axios.patch(`https://${auth0Domain}/api/v2/users/${userId}`, {
+            user_metadata: {
+                gender: gender,
+            }
+        }, {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+    } catch (error) {
+        console.error(`Error updating user metadata for Auth0 user in Gender ${userId}:`, error);
+    }
+}
 
 // Ruta para crear la tabla `user` en MySQL
 app.get('/users/create-table-users', (req, res) => {
@@ -575,6 +591,45 @@ app.get('/users/update-metadata', async (req, res) => {
     }
 });
 
+// Ruta para leer datos de MySQL y buscar en Auth0_user para actualizar metadata de genero en Auth0
+app.get('/users/update-metadata-gender-auth0', async (req, res) => {
+    try {
+        // Lógica para leer datos de MySQL
+        const query = 'SELECT * FROM auth0_user';
+        db.query(query, async (err, results) => {
+            if (err) {
+                console.error('Error reading data from MySQL:', err);
+                return res.status(500).send('Error reading data from MySQL.');
+            }
+
+            // Obtener token de acceso de Auth0
+            const token = await getAuth0Token();
+
+            // Buscar usuarios en Auth0 por email
+            const usersPromises = results.map(async (row) => {
+                const email = row.Email;
+                const gender = getGender(row.gender);
+
+                const auth0User = await getAuth0UserByEmail(token, email);
+
+                if (auth0User) {
+                    // Agregar los datos al usuario de Auth0
+                    await updateAuth0UserMetadataGender(token, auth0User.user_id, gender);
+                    console.log(`User metadata updated for Auth0 user in Gender: ${auth0User.user_id}`);
+                }
+
+                return { email, auth0User };
+            });
+            // Esperar todas las promesas de búsqueda y actualización de usuarios en Auth0
+            const users = await Promise.all(usersPromises);
+
+            res.json(users); // Retorna los datos de usuarios y sus correspondientes usuarios en Auth0
+        });
+    } catch (error) {
+        console.error('Error processing request:', error);
+        res.status(500).send('Error processing request.');
+    }
+});
 
 // Ruta para limpiar la tabla user de MySQL
 app.post('/users/clear-table', (req, res) => {
