@@ -123,11 +123,27 @@ async function getAllUsers() {
     });
 }
 
-// Función para encontrar un usuario en la tabla auth0_user
-async function findMatchingAuth0User(taxvat) {
+//Funcion para obtener todos los registros de la tabla user por su email unico en la tabla de user
+async function getAllUsersByUniqueEmail() {
     return new Promise((resolve, reject) => {
-        const query = 'SELECT * FROM auth0_user WHERE taxvat = ?';
-        const values = [taxvat];
+        const query = 'SELECT * FROM user WHERE email IN (SELECT email FROM user GROUP BY email HAVING COUNT(*) = 1)';
+        db.query(query, (err, results) => {
+            if (err) {
+                console.error('Error fetching data from user table:', err);
+                reject(err);
+            } else {
+                resolve(results);
+            }
+        });
+    }
+    );
+}
+
+// Función para encontrar un usuario en la tabla auth0_user
+async function findMatchingAuth0User(email) {
+    return new Promise((resolve, reject) => {
+        const query = 'SELECT * FROM auth0_user WHERE Email = ?';
+        const values = [email];
         db.query(query, values, (err, results) => {
             if (err) {
                 console.error('Error finding matching user in auth0_user table:', err);
@@ -145,11 +161,10 @@ async function findMatchingAuth0User(taxvat) {
 
 
 // Función para actualizar el metadata del usuario en Auth0
-async function updateAuth0UserMetadata(token, userId, gender, crmId, firstName, lastName, birthDate, axxNrodocumento, suscActivas) {
+async function updateAuth0UserMetadata(token, userId, crmId, firstName, lastName, birthDate, axxNrodocumento, suscActivas) {
     try {
         await axios.patch(`https://${auth0Domain}/api/v2/users/${userId}`, {
             user_metadata: {
-                gender: gender,
                 crm_id: crmId,
                 first_name: firstName,
                 last_name: lastName,
@@ -192,6 +207,33 @@ app.get('/users/create-table-users', (req, res) => {
         }
         console.log('Table `user` created or already exists.');
         res.send('Table `user` created or already exists.');
+    });
+});
+// Ruta para crear la tabla `user_filtered` en MySQL
+app.get('/users/create-table-users-filtered', (req, res) => {
+    const query = `
+        CREATE TABLE IF NOT EXISTS user_filtered (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            contact_id VARCHAR(255),
+            email VARCHAR(255),
+            first_name VARCHAR(100),
+            last_name VARCHAR(100),
+            gender_code VARCHAR(10),
+            axx_genero INT,
+            birth_date VARCHAR(255),
+            axx_tipodocumento VARCHAR(50),
+            axx_nrodocumento VARCHAR(50),
+            q_susc_activas INT
+        )
+    `;
+
+    db.query(query, (err, result) => {
+        if (err) {
+            console.error('Error creating table:', err);
+            return res.status(500).send('Error creating table.');
+        }
+        console.log('Table `user_filtered` created or already exists.');
+        res.send('Table `user_filtered` created or already exists.');
     });
 });
 
@@ -440,8 +482,8 @@ app.get('/users/search', (req, res) => {
 // Ruta para filtrar la tabla user y encontrar coincidencias en la tabla auth0_user
 app.get('/users/filter-and-find', async (req, res) => {
     try {
-        // Obtener todos los registros de la tabla user
-        const users = await getAllUsers();
+        // Obtener todos los registros de la tabla user con email único
+        const users = await getAllUsersByUniqueEmail();
 
         // Array para almacenar los resultados filtrados
         const filteredResults = [];
@@ -449,15 +491,38 @@ app.get('/users/filter-and-find', async (req, res) => {
         // Recorrer los registros de user
         for (const user of users) {
             console.log('User:', user);
-            const { axx_nrodocumento } = user;
+            const { email } = user;
             // Buscar coincidencias en la tabla auth0_user
-            const auth0User = await findMatchingAuth0User( axx_nrodocumento);
+            const auth0User = await findMatchingAuth0User( email);
             if (auth0User) {
                 filteredResults.push(user);
             }
         }
 
         res.json(filteredResults); // Retorna los resultados filtrados
+        //inserto en tabla user_filtered
+        for (const user of filteredResults) {
+            const { contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas } = user;
+            const query = 'INSERT INTO user_filtered (contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+            db.query(query, [
+                contact_id || null, 
+                email || null,
+                first_name || null,
+                last_name || null,
+                gender_code || null,
+                axx_genero || null,
+                birth_date || null,
+                axx_tipodocumento || null,
+                axx_nrodocumento || null,
+                q_susc_activas || null
+            ], (err, results) => {
+                if (err) {
+                    console.error('Error inserting data:', err);
+                } else {
+                    console.log('Data inserted successfully for email:', email);
+                }
+            });
+        }
     } catch (error) {
         console.error('Error filtering and finding data:', error);
         res.status(500).send('Error filtering and finding data.');
@@ -469,7 +534,7 @@ app.get('/users/filter-and-find', async (req, res) => {
 app.get('/users/update-metadata', async (req, res) => {
     try {
         // Lógica para leer datos de MySQL
-        const query = 'SELECT * FROM user';
+        const query = 'SELECT * FROM user_filtered';
         db.query(query, async (err, results) => {
             if (err) {
                 console.error('Error reading data from MySQL:', err);
@@ -482,7 +547,7 @@ app.get('/users/update-metadata', async (req, res) => {
             // Buscar usuarios en Auth0 por email
             const usersPromises = results.map(async (row) => {
                 const email = row.email;
-                const gender = getGender(row.axx_genero);
+                // const gender = getGender(row.axx_genero);
                 const crmId = row.contact_id;
                 const firstName = row.first_name;
                 const lastName = row.last_name;
@@ -493,7 +558,7 @@ app.get('/users/update-metadata', async (req, res) => {
 
                 if (auth0User) {
                     // Agregar los datos al usuario de Auth0
-                    await updateAuth0UserMetadata(token, auth0User.user_id, gender, crmId, firstName, lastName, birthDate, axxNrodocumento, suscActivas);
+                    await updateAuth0UserMetadata(token, auth0User.user_id, crmId, firstName, lastName, birthDate, axxNrodocumento, suscActivas);
                     console.log(`User metadata updated for Auth0 user: ${auth0User.user_id}`);
                 }
 
@@ -521,6 +586,18 @@ app.post('/users/clear-table', (req, res) => {
         }
         console.log('Tabla user limpiada.');
         res.send('Tabla user limpiada.');
+    });
+});
+// Ruta para limpiar la tabla user filtered de MySQL
+app.post('/users/clear-table-user-filtered', (req, res) => {
+    const query = 'TRUNCATE TABLE user_filtered';
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error('Error truncating table:', err);
+            return res.status(500).send('Error truncating table.');
+        }
+        console.log('Tabla user_filtered limpiada.');
+        res.send('Tabla user_filtered limpiada.');
     });
 });
 
