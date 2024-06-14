@@ -91,12 +91,14 @@ async function getAuth0UserByEmail(token, email) {
 function getGender(genderCode) {
     switch (genderCode) {
         case 1:
+        case '1':
         case 'masc':
         case 'masculino':
         case 'Masculino':
         case 'MASCULINO':
             return 'Masculino';
         case 2:
+        case '2':
         case 'fem':
         case 'femenino':
         case 'Femenino':
