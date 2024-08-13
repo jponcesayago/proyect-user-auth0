@@ -92,7 +92,7 @@ Obtener y buscar usuarios
 ### GET /users/search: Buscar usuario en MySQL por email o DNI.
 ### GET /users/filter-and-find: Filtrar la tabla user y encontrar coincidencias en la tabla auth0_user.
 Actualizar metadata y limpiar tablas
-### GET /users/update-metadata: Actualizar metadata de usuarios en Auth0.
+### GET /users/update-metadata?limit=100&offset=0: Actualizar metadata de usuarios en Auth0 con paginacion.
 ### POST /users/clear-table: Limpiar la tabla user en MySQL.
-### POST /users/clear-table-auth0: Limpiar la tabla auth0_user en MySQL.
+### POST /users/clear-table-auth0?limit=100&offset=0: Limpiar la tabla auth0_user en MySQL con paginacion.
 

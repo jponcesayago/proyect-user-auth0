@@ -1,12 +1,23 @@
-const express = require('express');
-const multer = require('multer');
-const mysql = require('mysql');
-const csv = require('csv-parser');
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios');
-const jwt = require('jsonwebtoken');
-const dotenv = require('dotenv');
+// const express = require('express');
+// const multer = require('multer');
+// const mysql = require('mysql');
+// const csv = require('csv-parser');
+// const fs = require('fs');
+// const path = require('path');
+// const axios = require('axios');
+// const jwt = require('jsonwebtoken');
+// const dotenv = require('dotenv');
+// const pLimit = require('p-limit');
+import express from 'express';
+import multer from 'multer';
+import mysql from 'mysql';
+import csv from 'csv-parser';
+import fs from 'fs';
+import path from 'path';
+import axios from 'axios';
+import dotenv from 'dotenv';
+import pLimit from 'p-limit';
+
 
 // Cargar variables de entorno desde el archivo .env
 dotenv.config();
@@ -549,43 +560,61 @@ app.get('/users/filter-and-find', async (req, res) => {
 
 
 // Ruta para leer datos de MySQL y buscar en Auth0 para actualizar metadata
+// Límite de solicitudes concurrentes
+const limit = pLimit(5); // Ajusta este valor según tus necesidades y límites de Auth0
+let count = 0;
+
+// Ruta para leer datos de MySQL y buscar en Auth0 para actualizar metadata
 app.get('/users/update-metadata', async (req, res) => {
+    const limitParam = parseInt(req.query.limit, 10) || 100;
+    const offset = parseInt(req.query.offset, 10) || 0;
+
     try {
-        // Lógica para leer datos de MySQL
-        const query = 'SELECT * FROM user_filtered';
-        db.query(query, async (err, results) => {
+        const query = 'SELECT * FROM user_filtered LIMIT ? OFFSET ?';
+        db.query(query, [limitParam, offset], async (err, results) => {
             if (err) {
                 console.error('Error reading data from MySQL:', err);
                 return res.status(500).send('Error reading data from MySQL.');
             }
 
-            // Obtener token de acceso de Auth0
-            const token = await getAuth0Token();
+            try {
+                const token = await getAuth0Token();
 
-            // Buscar usuarios en Auth0 por email
-            const usersPromises = results.map(async (row) => {
-                const email = row.email;
-                // const gender = getGender(row.axx_genero);
-                const crmId = row.contact_id;
-                const firstName = row.first_name;
-                const lastName = row.last_name;
-                const birthDate = row.birth_date;
-                const axxNrodocumento = row.axx_nrodocumento;
-                const suscActivas = row.q_susc_activas;
-                const auth0User = await getAuth0UserByEmail(token, email);
+                const usersPromises = results.map((row) => limit(async () => {
+                    const email = row.email;
+                    const crmId = row.contact_id;
+                    const firstName = row.first_name;
+                    const lastName = row.last_name;
+                    const birthDate = row.birth_date;
+                    const axxNrodocumento = row.axx_nrodocumento;
+                    const suscActivas = row.q_susc_activas;
+                    const auth0User = await getAuth0UserByEmail(token, email);
 
-                if (auth0User) {
-                    // Agregar los datos al usuario de Auth0
-                    await updateAuth0UserMetadata(token, auth0User.user_id, crmId, firstName, lastName, birthDate, axxNrodocumento, suscActivas);
-                    console.log(`User metadata updated for Auth0 user: ${auth0User.user_id}`);
-                }
+                    if (auth0User) {
+                        await updateAuth0UserMetadata(
+                            token,
+                            auth0User.user_id,
+                            crmId,
+                            firstName,
+                            lastName,
+                            birthDate,
+                            axxNrodocumento,
+                            suscActivas
+                        );
+                        count++;
+                        console.log(`User metadata updated for Auth0 user: ${auth0User.user_id} (${count})`);
+                    }
 
-                return { email, auth0User };
-            });
-            // Esperar todas las promesas de búsqueda y actualización de usuarios en Auth0
-            const users = await Promise.all(usersPromises);
+                    return { email, auth0User };
+                }));
 
-            res.json(users); // Retorna los datos de usuarios y sus correspondientes usuarios en Auth0
+                const users = await Promise.all(usersPromises);
+                res.json(users);
+
+            } catch (error) {
+                console.error('Error updating user metadata:', error);
+                res.status(500).send('Error updating user metadata.');
+            }
         });
     } catch (error) {
         console.error('Error processing request:', error);
@@ -593,45 +622,56 @@ app.get('/users/update-metadata', async (req, res) => {
     }
 });
 
-// Ruta para leer datos de MySQL y buscar en Auth0_user para actualizar metadata de genero en Auth0
+
 app.get('/users/update-metadata-gender-auth0', async (req, res) => {
+    const limitParam = parseInt(req.query.limit, 10) || 100;
+    const offset = parseInt(req.query.offset, 10) || 0;
+    let count = 0;
+
     try {
-        // Lógica para leer datos de MySQL
-        const query = 'SELECT * FROM auth0_user';
-        db.query(query, async (err, results) => {
+        // Importación dinámica de p-limit
+        // const pLimit = (await import('p-limit')).default;
+        // const limit = pLimit(45); // Configurar el límite de concurrencia
+
+        const query = 'SELECT * FROM auth0_user LIMIT ? OFFSET ?';
+        db.query(query, [limitParam, offset], async (err, results) => {
             if (err) {
                 console.error('Error reading data from MySQL:', err);
                 return res.status(500).send('Error reading data from MySQL.');
             }
 
-            // Obtener token de acceso de Auth0
-            const token = await getAuth0Token();
+            try {
+                const token = await getAuth0Token();
 
-            // Buscar usuarios en Auth0 por email
-            const usersPromises = results.map(async (row) => {
-                const email = row.Email;
-                const gender = getGender(row.gender);
+                const usersPromises = results.map((row) => limit(async () => {
+                    const email = row.Email;
+                    const gender = getGender(row.gender);
 
-                const auth0User = await getAuth0UserByEmail(token, email);
+                    const auth0User = await getAuth0UserByEmail(token, email);
 
-                if (auth0User) {
-                    // Agregar los datos al usuario de Auth0
-                    await updateAuth0UserMetadataGender(token, auth0User.user_id, gender);
-                    console.log(`User metadata updated for Auth0 user in Gender: ${auth0User.user_id}`);
-                }
+                    if (auth0User) {
+                        await updateAuth0UserMetadataGender(token, auth0User.user_id, gender);
+                        count++;
+                        console.log(`User metadata updated for Auth0 user in Gender: ${auth0User.user_id} (${count})`);
+                    }
 
-                return { email, auth0User };
-            });
-            // Esperar todas las promesas de búsqueda y actualización de usuarios en Auth0
-            const users = await Promise.all(usersPromises);
+                    return { email, auth0User };
+                }));
 
-            res.json(users); // Retorna los datos de usuarios y sus correspondientes usuarios en Auth0
+                const users = await Promise.all(usersPromises);
+                res.json(users);
+
+            } catch (error) {
+                console.error('Error updating user metadata:', error);
+                res.status(500).send('Error updating user metadata.');
+            }
         });
     } catch (error) {
         console.error('Error processing request:', error);
         res.status(500).send('Error processing request.');
     }
 });
+
 
 // Ruta para limpiar la tabla user de MySQL
 app.post('/users/clear-table', (req, res) => {
