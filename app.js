@@ -1,13 +1,3 @@
-// const express = require('express');
-// const multer = require('multer');
-// const mysql = require('mysql');
-// const csv = require('csv-parser');
-// const fs = require('fs');
-// const path = require('path');
-// const axios = require('axios');
-// const jwt = require('jsonwebtoken');
-// const dotenv = require('dotenv');
-// const pLimit = require('p-limit');
 import express from 'express';
 import multer from 'multer';
 import mysql from 'mysql';
@@ -559,7 +549,6 @@ app.get('/users/filter-and-find', async (req, res) => {
 });
 
 
-// Ruta para leer datos de MySQL y buscar en Auth0 para actualizar metadata
 // Límite de solicitudes concurrentes
 const limit = pLimit(5); // Ajusta este valor según tus necesidades y límites de Auth0
 let count = 0;
@@ -629,10 +618,6 @@ app.get('/users/update-metadata-gender-auth0', async (req, res) => {
     let count = 0;
 
     try {
-        // Importación dinámica de p-limit
-        // const pLimit = (await import('p-limit')).default;
-        // const limit = pLimit(45); // Configurar el límite de concurrencia
-
         const query = 'SELECT * FROM auth0_user LIMIT ? OFFSET ?';
         db.query(query, [limitParam, offset], async (err, results) => {
             if (err) {
