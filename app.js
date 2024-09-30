@@ -127,9 +127,21 @@ async function getAllUsers() {
 }
 
 //Funcion para obtener todos los registros de la tabla user por su email unico en la tabla de user
-async function getAllUsersByUniqueEmail() {
+async function getAllUsersByUniqueEmailAndStatusActive() {
     return new Promise((resolve, reject) => {
-        const query = 'SELECT * FROM user WHERE email IN (SELECT email FROM user GROUP BY email HAVING COUNT(*) = 1)';
+        const query = `
+            SELECT * FROM (
+                SELECT *,
+                       ROW_NUMBER() OVER (PARTITION BY email 
+                                          ORDER BY CASE 
+                                              WHEN q_susc_activas > 0 THEN 1 
+                                              ELSE 2 
+                                          END, 
+                                          created_on DESC) as rn
+                FROM user
+            ) as ranked_users
+            WHERE rn = 1
+        `;
         db.query(query, (err, results) => {
             if (err) {
                 console.error('Error fetching data from user table:', err);
@@ -206,6 +218,7 @@ app.get('/users/create-table-users', (req, res) => {
     const query = `
         CREATE TABLE IF NOT EXISTS user (
             id INT AUTO_INCREMENT PRIMARY KEY,
+            created_on VARCHAR(255),
             contact_id VARCHAR(255),
             email VARCHAR(255),
             first_name VARCHAR(100),
@@ -233,6 +246,7 @@ app.get('/users/create-table-users-filtered', (req, res) => {
     const query = `
         CREATE TABLE IF NOT EXISTS user_filtered (
             id INT AUTO_INCREMENT PRIMARY KEY,
+            created_on VARCHAR(255),
             contact_id VARCHAR(255),
             email VARCHAR(255),
             first_name VARCHAR(100),
@@ -332,7 +346,7 @@ app.post('/users/upload-file-auth0', upload.single('file'), async (req, res) => 
                     console.error('Missing required data: Id or Email is null');
                     continue; // Saltar esta fila si falta datos necesarios
                 }
-                
+
 
                 const query = `INSERT INTO auth0_user (
                     first_name, last_name, gender, birthday, taxvat, taxvat_type, crm_id, Id, Given_Name, Family_Name, Nickname, Name, Email, Email_Verified, Created_At, Updated_At
@@ -386,6 +400,7 @@ app.post('/users/upload-file', upload.single('file'), async (req, res) => {
         .on('end', async () => {
             for (const row of results) {
                 const {
+                    CreatedOn,
                     ContactId,
                     EMailAddress1,
                     FirstName,
@@ -398,9 +413,10 @@ app.post('/users/upload-file', upload.single('file'), async (req, res) => {
                     'Q susc activas': q_susc_activas
                 } = row;
 
-                const query = 'INSERT INTO user (contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+                const query = 'INSERT INTO user (created_on, contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
                 db.query(query, [
+                    CreatedOn || null,
                     ContactId || null,
                     EMailAddress1 || null,
                     FirstName || null,
@@ -498,55 +514,88 @@ app.get('/users/search', (req, res) => {
     });
 });
 
-// Ruta para filtrar la tabla user y encontrar coincidencias en la tabla auth0_user
 app.get('/users/filter-and-find', async (req, res) => {
     try {
-        // Obtener todos los registros de la tabla user con email único
-        const users = await getAllUsersByUniqueEmail();
-
-        // Array para almacenar los resultados filtrados
+        const users = await getAllUsersByUniqueEmailAndStatusActive();
         const filteredResults = [];
 
-        // Recorrer los registros de user
         for (const user of users) {
             console.log('User:', user);
             const { email } = user;
-            // Buscar coincidencias en la tabla auth0_user
-            const auth0User = await findMatchingAuth0User( email);
+            const auth0User = await findMatchingAuth0User(email);
             if (auth0User) {
                 filteredResults.push(user);
             }
         }
 
-        res.json(filteredResults); // Retorna los resultados filtrados
-        //inserto en tabla user_filtered
+        // Guardar en tabla user_filtered y manejar logs
+        const logSuccess = [];
+        const logError = [];
+
         for (const user of filteredResults) {
-            const { contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas } = user;
-            const query = 'INSERT INTO user_filtered (contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-            db.query(query, [
-                contact_id || null, 
-                email || null,
-                first_name || null,
-                last_name || null,
-                gender_code || null,
-                axx_genero || null,
-                birth_date || null,
-                axx_tipodocumento || null,
-                axx_nrodocumento || null,
-                q_susc_activas || null
-            ], (err, results) => {
-                if (err) {
-                    console.error('Error inserting data:', err);
-                } else {
-                    console.log('Data inserted successfully for email:', email);
-                }
+            const { created_on, contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas } = user;
+            const query = 'INSERT INTO user_filtered (created_on, contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+
+            try {
+                await new Promise((resolve, reject) => {
+                    db.query(query, [
+                        created_on || null,
+                        contact_id || null,
+                        email || null,
+                        first_name || null,
+                        last_name || null,
+                        gender_code || null,
+                        axx_genero || null,
+                        birth_date || null,
+                        axx_tipodocumento || null,
+                        axx_nrodocumento || null,
+                        q_susc_activas || 0
+                    ], (err, results) => {
+                        if (err) {
+                            logError.push(`Error inserting data: ${email} with ContactId: ${contact_id} and DNI: ${axx_nrodocumento}`);
+                            return reject(err);
+                        } else {
+                            logSuccess.push(`User filtered: ${email} with ContactId: ${contact_id} and DNI: ${axx_nrodocumento}`);
+                            return resolve(results);
+                        }
+                    });
+                });
+            } catch (err) {
+                console.error('Error inserting data:', err);
+            }
+        }
+
+        // Escribir logs en archivos al final
+        if (logError.length) {
+            fs.appendFile('logsErrorUserFiltered.txt', logError.join('\n') + '\n', (err) => {
+                if (err) console.error('Error writing logs:', err);
             });
         }
+
+        if (logSuccess.length) {
+            fs.appendFile('logsSuccesUserFiltered.txt', logSuccess.join('\n') + '\n', (err) => {
+                if (err) console.error('Error writing logs:', err);
+            });
+        }
+
+        // Contar éxitos y errores
+        const successCount = logSuccess.length;
+        const errorCount = logError.length;
+
+        // Agregar conteo al final de los logs
+        fs.appendFile('logsSummaryUserFiltered.txt', `Total successful inserts: ${successCount}\nTotal errors: ${errorCount}\n`, (err) => {
+            if (err) {
+                console.error('Error writing summary logs:', err);
+            }
+        });
+
+        res.json(filteredResults); // Retorna los resultados filtrados
     } catch (error) {
         console.error('Error filtering and finding data:', error);
         res.status(500).send('Error filtering and finding data.');
     }
 });
+
 
 
 // Límite de solicitudes concurrentes
@@ -557,6 +606,10 @@ let count = 0;
 app.get('/users/update-metadata', async (req, res) => {
     const limitParam = parseInt(req.query.limit, 10) || 100;
     const offset = parseInt(req.query.offset, 10) || 0;
+
+    let count = 0;
+    const logSuccess = [];
+    const logError = [];
 
     try {
         const query = 'SELECT * FROM user_filtered LIMIT ? OFFSET ?';
@@ -591,6 +644,7 @@ app.get('/users/update-metadata', async (req, res) => {
                             suscActivas
                         );
                         count++;
+                        logSuccess.push(`User metadata updated for Auth0 user: ${auth0User.user_id} (${count})`);
                         console.log(`User metadata updated for Auth0 user: ${auth0User.user_id} (${count})`);
                     }
 
@@ -598,6 +652,33 @@ app.get('/users/update-metadata', async (req, res) => {
                 }));
 
                 const users = await Promise.all(usersPromises);
+
+                // Escribir logs de éxito al final
+                if (logSuccess.length) {
+                    fs.appendFile('logsSuccessUpdateMetadata.txt', logSuccess.join('\n') + '\n', (err) => {
+                        if (err) {
+                            console.error('Error writing success logs:', err);
+                        }
+                    });
+                }
+
+                // Contar y registrar errores
+                const errorCount = logError.length;
+                if (errorCount > 0) {
+                    fs.appendFile('logsErrorUpdateMetadata.txt', logError.join('\n') + '\n', (err) => {
+                        if (err) {
+                            console.error('Error writing error logs:', err);
+                        }
+                    });
+                }
+
+                // Agregar conteo al final de los logs
+                fs.appendFile('logsSummaryUpdateMetadata.txt', `Total metadata updates: ${count}\nTotal errors: ${errorCount}\n`, (err) => {
+                    if (err) {
+                        console.error('Error writing summary logs:', err);
+                    }
+                });
+
                 res.json(users);
 
             } catch (error) {
@@ -610,6 +691,7 @@ app.get('/users/update-metadata', async (req, res) => {
         res.status(500).send('Error processing request.');
     }
 });
+
 
 
 app.get('/users/update-metadata-gender-auth0', async (req, res) => {
