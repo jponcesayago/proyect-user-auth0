@@ -174,6 +174,41 @@ async function findMatchingAuth0User(email) {
     });
 }
 
+// Función para encontrar un usuario en la tabla auth0_user por DNI
+async function findMatchingAuth0UserByDni(email, dni) {
+    return new Promise((resolve, reject) => {
+        // Primer intento: buscar por email
+        const queryByEmail = 'SELECT * FROM auth0_user WHERE LOWER(Email) = LOWER(?)';
+        db.query(queryByEmail, [email], (err, resultsByEmail) => {
+            if (err) {
+                console.error('Error finding matching user by email in auth0_user table:', err);
+                return reject(err);
+            }
+
+            if (resultsByEmail.length > 0) {
+                // Usuario encontrado por email, no continuamos con la búsqueda por DNI
+                return resolve(null);
+            }
+
+            // Si no se encuentra por email, intentar buscar por DNI
+            const queryByDNI = 'SELECT * FROM auth0_user WHERE taxvat = ?';
+            db.query(queryByDNI, [dni], (err, resultsByDNI) => {
+                if (err) {
+                    console.error('Error finding matching user by DNI in auth0_user table:', err);
+                    return reject(err);
+                }
+
+                if (resultsByDNI.length > 0) {
+                    return resolve(resultsByDNI[0]); // Usuario encontrado por DNI
+                } else {
+                    return resolve(null); // No se encontró ningún usuario
+                }
+            });
+        });
+    });
+}
+
+
 
 // Función para actualizar el metadata del usuario en Auth0
 async function updateAuth0UserMetadata(token, userId, crmId, firstName, lastName, birthDate, axxNrodocumento, suscActivas) {
@@ -431,7 +466,7 @@ app.post('/users/upload-file', upload.single('file'), async (req, res) => {
                     if (err) {
                         console.error('Error inserting data:', err);
                     } else {
-                        console.log('Data inserted successfully for ContactId:', ContactId);
+                        console.log('Data inserted successfully for ContactId:', ContactId, CreatedOn);
                     }
                 });
             }
@@ -521,8 +556,10 @@ app.get('/users/filter-and-find', async (req, res) => {
 
         for (const user of users) {
             console.log('User:', user);
-            const { email } = user;
+            // const { email } = user;
+            const { email, axx_nrodocumento } = user;
             const auth0User = await findMatchingAuth0User(email);
+            // const auth0User = await findMatchingAuth0UserByDni(email, axx_nrodocumento);
             if (auth0User) {
                 filteredResults.push(user);
             }
@@ -535,6 +572,7 @@ app.get('/users/filter-and-find', async (req, res) => {
         for (const user of filteredResults) {
             const { created_on, contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas } = user;
             const query = 'INSERT INTO user_filtered (created_on, contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+            // const query = 'INSERT INTO user_filtered_bydni (created_on, contact_id, email, first_name, last_name, gender_code, axx_genero, birth_date, axx_tipodocumento, axx_nrodocumento, q_susc_activas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
             try {
                 await new Promise((resolve, reject) => {
@@ -567,12 +605,14 @@ app.get('/users/filter-and-find', async (req, res) => {
 
         // Escribir logs en archivos al final
         if (logError.length) {
+            // fs.appendFile('logsErrorUserFilteredByDNI.txt', logError.join('\n') + '\n', (err) => {
             fs.appendFile('logsErrorUserFiltered.txt', logError.join('\n') + '\n', (err) => {
                 if (err) console.error('Error writing logs:', err);
             });
         }
 
         if (logSuccess.length) {
+            // fs.appendFile('logsSuccesUserFilteredByDNI.txt', logSuccess.join('\n') + '\n', (err) => {
             fs.appendFile('logsSuccesUserFiltered.txt', logSuccess.join('\n') + '\n', (err) => {
                 if (err) console.error('Error writing logs:', err);
             });
@@ -583,6 +623,7 @@ app.get('/users/filter-and-find', async (req, res) => {
         const errorCount = logError.length;
 
         // Agregar conteo al final de los logs
+        // fs.appendFile('logsSummaryUserFilteredByDNI.txt', `Total successful inserts: ${successCount}\nTotal errors: ${errorCount}\n`, (err) => {
         fs.appendFile('logsSummaryUserFiltered.txt', `Total successful inserts: ${successCount}\nTotal errors: ${errorCount}\n`, (err) => {
             if (err) {
                 console.error('Error writing summary logs:', err);
