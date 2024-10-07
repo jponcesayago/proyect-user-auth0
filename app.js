@@ -88,6 +88,27 @@ async function getAuth0UserByEmail(token, email) {
     }
 }
 
+// Buscar usuario en Auth0 por DNI u otro dato en los metadatos
+async function getAuth0UserByDNI(token, dni) {
+    try {
+        const response = await axios.get(`https://${auth0Domain}/api/v2/users`, {
+            headers: {
+                Authorization: `Bearer ${token}`
+            },
+            params: {
+                q: `user_metadata.taxvat:"${dni}"`, // Reemplaza "dni" con el nombre real que uses en los metadatos
+                search_engine: 'v3' // Uso del motor de búsqueda correcto
+            }
+        });
+
+        console.log('Auth0 user by DNI:', response.data[0]);
+        return response.data[0]; // Retorna el primer usuario encontrado por DNI
+    } catch (error) {
+        console.error('Error getting Auth0 user by DNI:', error);
+    }
+}
+
+
 // Función para obtener el género en el formato esperado
 function getGender(genderCode) {
     switch (genderCode) {
@@ -558,7 +579,7 @@ app.get('/users/filter-and-find', async (req, res) => {
             console.log('User:', user);
             // const { email } = user;
             const { email, axx_nrodocumento } = user;
-            const auth0User = await findMatchingAuth0User(email);
+            const auth0User = await findMatchingAuth0User(email?.toLowerCase())
             // const auth0User = await findMatchingAuth0UserByDni(email, axx_nrodocumento);
             if (auth0User) {
                 filteredResults.push(user);
@@ -671,7 +692,14 @@ app.get('/users/update-metadata', async (req, res) => {
                     const birthDate = row.birth_date;
                     const axxNrodocumento = row.axx_nrodocumento;
                     const suscActivas = row.q_susc_activas;
-                    const auth0User = await getAuth0UserByEmail(token, email);
+                    // Intentar primero buscar por email
+                    let auth0User = await getAuth0UserByEmail(token, email);
+
+                    // Si no encuentra por email, buscar por DNI
+                    if (!auth0User) {
+                        console.log(`No user found with email: ${email}. Trying with DNI: ${axxNrodocumento}`);
+                        auth0User = await getAuth0UserByDNI(token, axxNrodocumento);
+                    }
 
                     if (auth0User) {
                         await updateAuth0UserMetadata(
@@ -685,7 +713,7 @@ app.get('/users/update-metadata', async (req, res) => {
                             suscActivas
                         );
                         count++;
-                        logSuccess.push(`User metadata updated for Auth0 user: ${auth0User.user_id} (${count})`);
+                        logSuccess.push(`User metadata updated for Auth0 user by EMAIL OR DNI: ${auth0User.user_id} (${count})`);
                         console.log(`User metadata updated for Auth0 user: ${auth0User.user_id} (${count})`);
                     }
 
@@ -696,7 +724,7 @@ app.get('/users/update-metadata', async (req, res) => {
 
                 // Escribir logs de éxito al final
                 if (logSuccess.length) {
-                    fs.appendFile('logsSuccessUpdateMetadata.txt', logSuccess.join('\n') + '\n', (err) => {
+                    fs.appendFile('logsSuccessUpdateMetadataByEMAILORDNI.txt', logSuccess.join('\n') + '\n', (err) => {
                         if (err) {
                             console.error('Error writing success logs:', err);
                         }
@@ -706,7 +734,7 @@ app.get('/users/update-metadata', async (req, res) => {
                 // Contar y registrar errores
                 const errorCount = logError.length;
                 if (errorCount > 0) {
-                    fs.appendFile('logsErrorUpdateMetadata.txt', logError.join('\n') + '\n', (err) => {
+                    fs.appendFile('logsErrorUpdateMetadataBYEMAILORDNI.txt', logError.join('\n') + '\n', (err) => {
                         if (err) {
                             console.error('Error writing error logs:', err);
                         }
@@ -714,7 +742,7 @@ app.get('/users/update-metadata', async (req, res) => {
                 }
 
                 // Agregar conteo al final de los logs
-                fs.appendFile('logsSummaryUpdateMetadata.txt', `Total metadata updates: ${count}\nTotal errors: ${errorCount}\n`, (err) => {
+                fs.appendFile('logsSummaryUpdateMetadataByEMAILORDNI.txt', `Total metadata updates: ${count}\nTotal errors: ${errorCount}\n`, (err) => {
                     if (err) {
                         console.error('Error writing summary logs:', err);
                     }
