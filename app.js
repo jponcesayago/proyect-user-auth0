@@ -54,6 +54,7 @@ const auth0ClientId = process.env.AUTH0_CLIENT_ID;
 const auth0ClientSecret = process.env.AUTH0_CLIENT_SECRET;
 const auth0Audience = process.env.AUTH0_AUDIENCE;
 
+/* ################################### FUNCTIONS ####################################### */
 // Obtener token de acceso de Auth0
 async function getAuth0Token() {
     try {
@@ -108,7 +109,6 @@ async function getAuth0UserByDNI(token, dni) {
     }
 }
 
-
 // Función para obtener el género en el formato esperado
 function getGender(genderCode) {
     switch (genderCode) {
@@ -129,22 +129,6 @@ function getGender(genderCode) {
         default:
             return 'Masculino';
     }
-}
-
-
-// Función para obtener todos los registros de la tabla user
-async function getAllUsers() {
-    return new Promise((resolve, reject) => {
-        const query = 'SELECT * FROM user';
-        db.query(query, (err, results) => {
-            if (err) {
-                console.error('Error fetching data from user table:', err);
-                reject(err);
-            } else {
-                resolve(results);
-            }
-        });
-    });
 }
 
 //Funcion para obtener todos los registros de la tabla user por su email unico en la tabla de user
@@ -175,7 +159,7 @@ async function getAllUsersByUniqueEmailAndStatusActive() {
     );
 }
 
-// Función para encontrar un usuario en la tabla auth0_user
+// Función para encontrar un usuario en la tabla auth0_user por email
 async function findMatchingAuth0User(email) {
     return new Promise((resolve, reject) => {
         const query = 'SELECT * FROM auth0_user WHERE Email = ?';
@@ -195,7 +179,7 @@ async function findMatchingAuth0User(email) {
     });
 }
 
-// Función para encontrar un usuario en la tabla auth0_user por DNI
+// Función para encontrar un usuario en la tabla auth0_user por DNI y que no lo haya encontrado por email
 async function findMatchingAuth0UserByDni(email, dni) {
     return new Promise((resolve, reject) => {
         // Primer intento: buscar por email
@@ -228,8 +212,6 @@ async function findMatchingAuth0UserByDni(email, dni) {
         });
     });
 }
-
-
 
 // Función para actualizar el metadata del usuario en Auth0
 async function updateAuth0UserMetadata(token, userId, crmId, firstName, lastName, birthDate, axxNrodocumento, suscActivas) {
@@ -269,6 +251,7 @@ async function updateAuth0UserMetadataGender(token, userId, gender) {
     }
 }
 
+/* ################################### ROUTES ####################################### */
 // Ruta para crear la tabla `user` en MySQL
 app.get('/users/create-table-users', (req, res) => {
     const query = `
@@ -297,6 +280,7 @@ app.get('/users/create-table-users', (req, res) => {
         res.send('Table `user` created or already exists.');
     });
 });
+
 // Ruta para crear la tabla `user_filtered` en MySQL
 app.get('/users/create-table-users-filtered', (req, res) => {
     const query = `
@@ -359,7 +343,7 @@ app.get('/users/create-table-auth0-users', (req, res) => {
     );
 });
 
-// Ruta para subir el archivo CSV a la tabla auth0_user
+// Ruta para subir el archivo CSV a la tabla auth0_user en MySQL
 app.post('/users/upload-file-auth0', upload.single('file'), async (req, res) => {
     if (!req.file) {
         return res.status(400).send('No file uploaded.');
@@ -439,9 +423,7 @@ app.post('/users/upload-file-auth0', upload.single('file'), async (req, res) => 
         });
 });
 
-
-
-// Ruta para subir el archivo CSV
+// Ruta para subir el archivo CSV a la tabla user de MySQL
 app.post('/users/upload-file', upload.single('file'), async (req, res) => {
     if (!req.file) {
         return res.status(400).send('No file uploaded.');
@@ -570,6 +552,7 @@ app.get('/users/search', (req, res) => {
     });
 });
 
+// Ruta para filtrar y encontrar usuarios en MySQL y Auth0 ya sea por email o DNI y volcarlos en la tabla user_filtered o user_filtered_bydni
 app.get('/users/filter-and-find', async (req, res) => {
     try {
         const users = await getAllUsersByUniqueEmailAndStatusActive();
@@ -577,10 +560,9 @@ app.get('/users/filter-and-find', async (req, res) => {
 
         for (const user of users) {
             console.log('User:', user);
-            // const { email } = user;
             const { email, axx_nrodocumento } = user;
-            const auth0User = await findMatchingAuth0User(email?.toLowerCase())
-            // const auth0User = await findMatchingAuth0UserByDni(email, axx_nrodocumento);
+            const auth0User = await findMatchingAuth0User(email?.toLowerCase()) // Buscar por email y guardar en tabla user_filtered
+            // const auth0User = await findMatchingAuth0UserByDni(email?.toLowerCase(), axx_nrodocumento); // Buscar por DNI y guardar en tabla user_filtered_bydni
             if (auth0User) {
                 filteredResults.push(user);
             }
@@ -693,7 +675,7 @@ app.get('/users/update-metadata', async (req, res) => {
                     const axxNrodocumento = row.axx_nrodocumento;
                     const suscActivas = row.q_susc_activas;
                     // Intentar primero buscar por email
-                    let auth0User = await getAuth0UserByEmail(token, email);
+                    let auth0User = await getAuth0UserByEmail(token, email?.toLowerCase());
 
                     // Si no encuentra por email, buscar por DNI
                     if (!auth0User) {
@@ -761,8 +743,7 @@ app.get('/users/update-metadata', async (req, res) => {
     }
 });
 
-
-
+// Ruta para leer datos de MySQL y buscar en Auth0 para actualizar metadata solo genero
 app.get('/users/update-metadata-gender-auth0', async (req, res) => {
     const limitParam = parseInt(req.query.limit, 10) || 100;
     const offset = parseInt(req.query.offset, 10) || 0;
@@ -807,7 +788,6 @@ app.get('/users/update-metadata-gender-auth0', async (req, res) => {
         res.status(500).send('Error processing request.');
     }
 });
-
 
 // Ruta para limpiar la tabla user de MySQL
 app.post('/users/clear-table', (req, res) => {
