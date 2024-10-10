@@ -71,6 +71,27 @@ async function getAuth0Token() {
     }
 }
 
+// Función para eliminar un usuario en Auth0
+async function deleteUserInAuth0(userId, token) {
+    try {
+        const response = await axios.delete(`https://${auth0Domain}/api/v2/users/${userId}`, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
+        console.log(`Usuario ${userId} eliminado exitosamente en Auth0`);
+        return response.status;
+    } catch (error) {
+        const errorMessage = error.response
+            ? `${error.response.status} - ${error.response.data.error}: ${error.response.data.error_description}`
+            : error.message;
+        
+        console.error(`Error eliminando el usuario ${userId} en Auth0: ${errorMessage}`);
+        throw new Error(`Error eliminando el usuario ${userId}: ${errorMessage}`);
+    }
+}
+
+
 // Buscar usuario en Auth0 por email
 async function getAuth0UserByEmail(token, email) {
     try {
@@ -103,7 +124,7 @@ async function getAuth0UserByDNI(token, dni) {
         });
 
         console.log('Auth0 user by DNI:', response.data[0]);
-        return response.data[0]; // Retorna el primer usuario encontrado por DNI
+        return response.data; // Retorna el primer usuario encontrado por DNI
     } catch (error) {
         console.error('Error getting Auth0 user by DNI:', error);
     }
@@ -329,7 +350,8 @@ app.get('/users/create-table-auth0-users', (req, res) => {
             Email VARCHAR(255),
             Email_Verified BOOLEAN,
             Created_At DATETIME,
-            Updated_At DATETIME
+            Updated_At DATETIME,
+            last_login DATETIME
         )
     `;
     db.query(query, (err, result) => {
@@ -378,7 +400,8 @@ app.post('/users/upload-file-auth0', upload.single('file'), async (req, res) => 
                     Email,
                     'Email Verified': Email_Verified,
                     'Created At': Created_At,
-                    'Updated At': Updated_At
+                    'Updated At': Updated_At,
+                    'Last Login': last_login
                 } = row;
 
                 // Validar que los campos necesarios no sean nulos
@@ -389,8 +412,8 @@ app.post('/users/upload-file-auth0', upload.single('file'), async (req, res) => 
 
 
                 const query = `INSERT INTO auth0_user (
-                    first_name, last_name, gender, birthday, taxvat, taxvat_type, crm_id, Id, Given_Name, Family_Name, Nickname, Name, Email, Email_Verified, Created_At, Updated_At
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                    first_name, last_name, gender, birthday, taxvat, taxvat_type, crm_id, Id, Given_Name, Family_Name, Nickname, Name, Email, Email_Verified, Created_At, Updated_At, last_login
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
                 db.query(query, [
                     first_name || null,
@@ -408,7 +431,8 @@ app.post('/users/upload-file-auth0', upload.single('file'), async (req, res) => 
                     Email,
                     Email_Verified === 'true', // Convertir a booleano
                     Created_At ? new Date(Created_At) : null,
-                    Updated_At ? new Date(Updated_At) : null
+                    Updated_At ? new Date(Updated_At) : null,
+                    last_login ? new Date(last_login) : null
                 ], (err, results) => {
                     if (err) {
                         console.error('Error inserting data:', err);
@@ -665,7 +689,7 @@ app.get('/users/update-metadata', async (req, res) => {
 
             try {
                 const token = await getAuth0Token();
-
+                let auth0User;
                 const usersPromises = results.map((row) => limit(async () => {
                     const email = row.email;
                     const crmId = row.contact_id;
@@ -675,18 +699,18 @@ app.get('/users/update-metadata', async (req, res) => {
                     const axxNrodocumento = row.axx_nrodocumento;
                     const suscActivas = row.q_susc_activas;
                     // Intentar primero buscar por email
-                    let auth0User = await getAuth0UserByEmail(token, email?.toLowerCase());
+                    // let auth0User = await getAuth0UserByEmail(token, email?.toLowerCase());
 
                     // Si no encuentra por email, buscar por DNI
-                    if (!auth0User) {
-                        console.log(`No user found with email: ${email}. Trying with DNI: ${axxNrodocumento}`);
-                        auth0User = await getAuth0UserByDNI(token, axxNrodocumento);
-                    }
-
+                    // if (!auth0User) {
+                    // console.log(`No user found with email: ${email}. Trying with DNI: ${axxNrodocumento}`);
+                    auth0User = await getAuth0UserByDNI(token, axxNrodocumento);
+                    // }
+                    console.log('Auth0 user by dni updated:', auth0User[0].user_id);
                     if (auth0User) {
                         await updateAuth0UserMetadata(
                             token,
-                            auth0User.user_id,
+                            auth0User[0].user_id,
                             crmId,
                             firstName,
                             lastName,
@@ -742,6 +766,82 @@ app.get('/users/update-metadata', async (req, res) => {
         res.status(500).send('Error processing request.');
     }
 });
+
+// Ruta para borrar usuario en Auth0 por email leido de la tabla auth0_user
+app.get('/users/delete-auth0-user', async (req, res) => {
+    const limitParam = parseInt(req.query.limit, 10) || 100;
+    const offset = parseInt(req.query.offset, 10) || 0;
+
+    let count = 0;
+    const logSuccess = [];
+    const logError = [];
+
+    try {
+        const query = 'SELECT * FROM auth0_user LIMIT ? OFFSET ?';
+        db.query(query, [limitParam, offset], async (err, results) => {
+            if (err) {
+                console.error('Error reading data from MySQL:', err);
+                return res.status(500).send('Error reading data from MySQL.');
+            }
+
+            try {
+                const token = await getAuth0Token();
+
+                const usersPromises = results.map((row) => limit(async () => {
+                    const email = row.Email;
+                    const auth0User = await getAuth0UserByEmail(token, email);
+
+                    if (auth0User) {
+                        await deleteUserInAuth0(auth0User.user_id, token);
+                        count++;
+                        logSuccess.push(`User deleted in Auth0: ${auth0User.user_id} (${count})`);
+                        console.log(`User deleted in Auth0: ${auth0User.user_id} (${count})`);
+                    }
+
+                    return { email, auth0User };
+                }));
+
+                const users = await Promise.all(usersPromises);
+
+                // Escribir logs de éxito al final
+                if (logSuccess.length) {
+                    fs.appendFile('logsSuccessDeleteAuth0User.txt', logSuccess.join('\n') + '\n', (err) => {
+                        if (err) {
+                            console.error('Error writing success logs:', err);
+                        }
+                    });
+                }
+
+                // Contar y registrar errores
+                const errorCount = logError.length;
+                if (errorCount > 0) {
+                    fs.appendFile('logsErrorDeleteAuth0User.txt', logError.join('\n') + '\n', (err) => {
+                        if (err) {
+                            console.error('Error writing error logs:', err);
+                        }
+                    });
+                }
+
+                // Agregar conteo al final de los logs
+                fs.appendFile('logsSummaryDeleteAuth0User.txt', `Total users deleted: ${count}\nTotal errors: ${errorCount}\n`, (err) => {
+                    if (err) {
+                        console.error('Error writing summary logs:', err);
+                    }
+                });
+
+                res.json(users);
+
+            } catch (error) {
+                console.error('Error deleting user in Auth0:', error);
+                res.status(500).send('Error deleting user in Auth0.');
+            }
+        });
+    } catch (error) {
+        console.error('Error processing request:', error);
+        res.status(500).send('Error processing request.');
+    }
+});
+
 
 // Ruta para leer datos de MySQL y buscar en Auth0 para actualizar metadata solo genero
 app.get('/users/update-metadata-gender-auth0', async (req, res) => {
