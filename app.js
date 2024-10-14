@@ -842,6 +842,73 @@ app.get('/users/delete-auth0-user', async (req, res) => {
     }
 });
 
+// Ruta para borrar usuarios en Auth0 leyendo desde un array de emails
+app.get('/users/delete-auth0-user-by-email-array', async (req, res) => {
+    const emails = [
+        'la_mole99@hotmail.com',
+        'martingomezc+1@hotmail.com',
+        'henryvarg@gmail.com',
+    ];
+    
+    let count = 0;
+    const logSuccess = [];
+    const logError = [];
+
+    try {
+        const token = await getAuth0Token();
+
+        const usersPromises = emails.map((email) => limit(async () => {
+            try {
+                const auth0User = await getAuth0UserByEmail(token, email);
+
+                if (auth0User) {
+                    await deleteUserInAuth0(auth0User.user_id, token);
+                    count++;
+                    logSuccess.push(`User deleted in Auth0: ${auth0User.user_id} (${count})`);
+                    console.log(`User deleted in Auth0: ${auth0User.user_id} (${count})`);
+                }
+            } catch (error) {
+                logError.push(`Error deleting user with email ${email}: ${error.message}`);
+                console.error(`Error deleting user with email ${email}:`, error);
+            }
+        }));
+
+        await Promise.all(usersPromises);
+
+        // Escribir logs de éxito
+        if (logSuccess.length) {
+            fs.appendFile('logsSuccessDeleteAuth0User.txt', logSuccess.join('\n') + '\n', (err) => {
+                if (err) {
+                    console.error('Error writing success logs:', err);
+                }
+            });
+        }
+
+        // Escribir logs de error
+        if (logError.length) {
+            fs.appendFile('logsErrorDeleteAuth0User.txt', logError.join('\n') + '\n', (err) => {
+                if (err) {
+                    console.error('Error writing error logs:', err);
+                }
+            });
+        }
+
+        // Agregar conteo al final de los logs
+        fs.appendFile('logsSummaryDeleteAuth0User.txt', `Total users deleted: ${count}\nTotal errors: ${logError.length}\n`, (err) => {
+            if (err) {
+                console.error('Error writing summary logs:', err);
+            }
+        });
+
+        res.json({ message: 'User deletion process completed', totalDeleted: count, totalErrors: logError.length });
+
+    } catch (error) {
+        console.error('Error processing request:', error);
+        res.status(500).send('Error processing request.');
+    }
+});
+
+
 
 // Ruta para leer datos de MySQL y buscar en Auth0 para actualizar metadata solo genero
 app.get('/users/update-metadata-gender-auth0', async (req, res) => {
