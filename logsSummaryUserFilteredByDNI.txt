@@ -1,2 +1,0 @@
-Total successful inserts: 741
-Total errors: 0
