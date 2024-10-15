@@ -1,6 +1,6 @@
-# Proyecto User Auth0
+# API de Gestión de Usuarios con MySQL y Auth0
 
-Una aplicación Node.js para manejar la autenticación y la sincronización de usuarios entre una base de datos MySQL y Auth0.
+Esta API permite gestionar usuarios en una base de datos MySQL, incluyendo la creación de tablas, la carga de datos desde archivos CSV y la búsqueda de usuarios tanto en MySQL como en Auth0. A continuación se detallan las rutas disponibles.
 
 ## Tabla de Contenidos
 
@@ -95,4 +95,59 @@ Actualizar metadata y limpiar tablas
 ### GET /users/update-metadata?limit=100&offset=0: Actualizar metadata de usuarios en Auth0 con paginacion.
 ### POST /users/clear-table: Limpiar la tabla user en MySQL.
 ### POST /users/clear-table-auth0?limit=100&offset=0: Limpiar la tabla auth0_user en MySQL con paginacion.
+
+
+Rutas de la API
+1. Crear Tablas 
+Ruta: /users/create-table-users
+.Descripción: Crea la tabla user en MySQL si no existe.
+Ruta: /users/create-table-users-filtered 
+.Descripción: Crea la tabla user_filtered en MySQL si no existe.
+Ruta: /users/create-table-auth0-users 
+.Descripción: Crea la tabla auth0_user en MySQL si no existe.
+
+2. Cargar Archivos CSV
+Ruta: /users/upload-file-auth0
+
+Método: POST
+ .Descripción: Carga un archivo CSV a la tabla auth0_user. El
+archivo debe incluir las siguientes columnas: first_name, last_name,
+gender, birthday, taxvat, taxvat_type, crm_id, Id, Given Name, Family
+Name, Nickname, Name, Email, Email Verified, Created At, Updated At.
+Ruta: /users/upload-file
+
+Método: POST
+ .Descripción: Carga un archivo CSV a la tabla user. El
+archivo debe incluir las siguientes columnas: CreatedOn, ContactId,
+EMailAddress1, FirstName, LastName, GenderCode, axx_genero, BirthDate,
+axx_tipodocumento, axx_nrodocumento, Q susc activas.
+
+3. Leer Datos
+ Ruta: /users
+ Método: GET
+ .Descripción: Lee todos los usuarios de la tabla user.
+
+4. Buscar Usuarios Ruta: /users/auth0-search
+
+Método: GET
+ .Descripción: Busca un usuario en Auth0 por su email. Se
+requiere el parámetro email. 
+Ruta: /users/search
+
+Método: GET
+ .Descripción: Busca un usuario en MySQL por email o DNI. Se
+requiere al menos uno de los parámetros: email o dni. 
+
+5. Filtrar y Encontrar Usuarios
+ Ruta: /users/filter-and-find
+ 
+  Método: GET
+.Descripción: Filtra y encuentra usuarios en MySQL y Auth0, ya sea por email o DNI, y
+los almacena en la tabla user_filtered. 
+
+6. Actualizar Metadatos
+ Ruta: /users/update-metadata
+ 
+ Método: GET
+  .Descripción: Lee datos de MySQL y busca en Auth0 para actualizar los metadatos de los usuarios. Utiliza paginación con parámetros limit y offset. Notas Los archivos CSV deben estar correctamente formateados para evitar errores durante la carga de datos. Se implementan logs para el seguimiento de inserciones exitosas y errores durante el proceso de carga y filtrado de usuarios. Se recomienda configurar las credenciales y permisos necesarios para el acceso a la API de Auth0.
 
