@@ -7,6 +7,7 @@ import path from 'path';
 import axios from 'axios';
 import dotenv from 'dotenv';
 import pLimit from 'p-limit';
+import moment from 'moment';
 
 
 // Cargar variables de entorno desde el archivo .env
@@ -271,6 +272,65 @@ async function updateAuth0UserMetadataGender(token, userId, gender) {
         console.error(`Error updating user metadata for Auth0 user in Gender ${userId}:`, error);
     }
 }
+
+// Función para actualizar el metadata del usuario en Auth0 solo fecha de nacimiento
+async function updateAuth0UserMetadataBirthday(token, userId, birthDate) {
+    try {
+        await axios.patch(`https://${auth0Domain}/api/v2/users/${userId}`, {
+            user_metadata: {
+                birthday: birthDate,
+            }
+        }, {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+    } catch (error) {
+        console.error(`Error updating user metadata for Auth0 user in Birthday ${userId}:`, error);
+    }
+}
+
+// Función para determinar si la fecha de cumpleaños debe ser convertida
+function shouldConvertBirthday(birthday) {
+    // Verificar si el cumpleaños está en uno de los formatos especificados 
+    // (DD-MM-YY, DD/MM/YY, DD.MM.YY, DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY o "YYYY-MM-DD 02:00:00.000")
+    const dateFormatsRegex = /^\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}$/;
+    const fullDateTimeRegex = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/;
+
+    // Verificar si cumple con alguno de los dos formatos
+    const isBirthdayValid = dateFormatsRegex.test(birthday) || fullDateTimeRegex.test(birthday);
+
+    console.log('Birthday test:', isBirthdayValid);
+    return isBirthdayValid;
+}
+
+
+// Función para convertir la fecha al formato 'YYYY-MM-DD 02:00:00.000'
+function convertBirthday(birthday) {
+    let parsedDate;
+
+    // Detectar el formato de la fecha y convertirla a 'YYYY-MM-DDTHH:mm:ss'
+    if (/^\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2}$/.test(birthday)) {
+        // Caso de fechas como '01-01-01' o '01/01/00'
+        parsedDate = moment(birthday, ['DD-MM-YY', 'DD/MM/YY', 'DD.MM.YY']);
+    } else if (/^\d{1,2}[-\/.]\d{1,2}[-\/.]\d{4}$/.test(birthday)) {
+        // Caso de fechas como '01-03-1988', '01/01/1956', '01.04.1949'
+        parsedDate = moment(birthday, ['DD-MM-YYYY', 'DD/MM/YYYY', 'DD.MM.YYYY']);
+    } else if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/.test(birthday)) {
+        // Caso de fechas como '1986-11-27 02:00:00.000'
+        parsedDate = moment(birthday, 'YYYY-MM-DD HH:mm:ss.SSS');
+    }
+
+    if (parsedDate && parsedDate.isValid()) {
+        // Formatear la fecha a 'YYYY-MM-DDTHH:mm:ss'
+        return parsedDate.format('YYYY-MM-DDTHH:mm:ss');
+    }
+
+    // Si la fecha no es válida, devolver null
+    return null;
+}
+
+
 
 /* ################################### ROUTES ####################################### */
 // Ruta para crear la tabla `user` en MySQL
@@ -955,6 +1015,99 @@ app.get('/users/update-metadata-gender-auth0', async (req, res) => {
         res.status(500).send('Error processing request.');
     }
 });
+
+
+
+// Ruta para leer datos de MySQL y actualizar la fecha de nacimiento en Auth0 si es necesario
+app.get('/users/update-metadata-birthday-auth0', async (req, res) => {
+    const limitParam = parseInt(req.query.limit, 10) || 100;
+    const offset = parseInt(req.query.offset, 10) || 0;
+    let count = 0;
+    const logSuccess = [];
+    const logError = [];
+
+    try {
+        const query = "SELECT * FROM users_auth0.auth0_user";
+        db.query(query, [limitParam, offset], async (err, results) => {
+            if (err) {
+                console.error('Error reading data from MySQL:', err);
+                return res.status(500).send('Error reading data from MySQL.');
+            }
+
+            try {
+                const token = await getAuth0Token();
+
+                const usersPromises = results.map((row) => limit(async () => {
+                    const email = row.Email;
+                    let birthday = row.birthday;
+console.log('birthday:', birthday);
+                    // Comprobar si la fecha es válida y puede ser convertida
+                    if (birthday && shouldConvertBirthday(birthday)) {
+                        // Convertir el cumpleaños al formato deseado: 'YYYY-MM-DDTHH:mm:ss'
+                        const formattedBirthday = convertBirthday(birthday);
+
+                        if (formattedBirthday) {
+                            const auth0User = await getAuth0UserByEmail(token, email);
+
+                            if (auth0User) {
+                                await updateAuth0UserMetadataBirthday(token, auth0User.user_id, formattedBirthday);
+                                count++;
+                                logSuccess.push(`User metadata updated for Auth0 user in Birthday: ${auth0User.user_id} (${count})`);
+                                console.log(`User metadata updated for Auth0 user in Birthday: ${auth0User.user_id} (${count})`);
+                            }
+                        } else {
+                            logError.push(`Skipping user ${email}: unable to convert birthday.`);
+                            console.log(`Skipping user ${email}: unable to convert birthday.`);
+                        }
+                    } else {
+                        logError.push(`Skipping user ${email}: invalid or null birthday.`);
+                        console.log(`Skipping user ${email}: invalid or null birthday.`);
+                    }
+
+                    return { email };
+                }));
+
+                const users = await Promise.all(usersPromises);
+                
+                // Escribir logs de éxito al final
+                if (logSuccess.length) {
+                    fs.appendFile('logsSuccessUpdateMetadataBirthday.txt', logSuccess.join('\n') + '\n', (err) => {
+                        if (err) {
+                            console.error('Error writing success logs:', err);
+                        }
+                    });
+                }
+                
+                // Escribir logs de error al final
+                if (logError.length) {
+                    fs.appendFile('logsErrorUpdateMetadataBirthday.txt', logError.join('\n') + '\n', (err) => {
+                        if (err) {
+                            console.error('Error writing error logs:', err);
+                        }
+                    });
+                }
+                
+                // Agregar conteo al final de los logs
+                fs.appendFile('logsSummaryUpdateMetadataBirthday.txt', `Total metadata updates: ${count}\nTotal errors: ${logError.length}\n`, (err) => {
+                    if (err) {
+                        console.error('Error writing summary logs:', err);
+                    }
+                });
+                
+                res.json({ updatedUsers: users.length, totalProcessed: count });
+
+            } catch (error) {
+                console.error('Error updating user metadata:', error);
+                res.status(500).send('Error updating user metadata.');
+            }
+        });
+    } catch (error) {
+        console.error('Error processing request:', error);
+        res.status(500).send('Error processing request.');
+    }
+});
+
+
 
 // Ruta para limpiar la tabla user de MySQL
 app.post('/users/clear-table', (req, res) => {
