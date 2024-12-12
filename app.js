@@ -169,6 +169,20 @@ async function getAllUsersByUniqueEmailAndStatusActive() {
             ) as ranked_users
             WHERE rn = 1
         `;
+        //query donde incluya tambien los usuarios que no tengan suscripciones activas o sea q_susc_activas = 0
+        // const query = `
+        //     SELECT * FROM (
+        //         SELECT *,
+        //                ROW_NUMBER() OVER (PARTITION BY email
+        //                                   ORDER BY CASE
+        //                                       WHEN q_susc_activas > 0 THEN 1
+        //                                       ELSE 2
+        //                                   END,
+        //                                   created_on DESC) as rn
+        //         FROM user
+        //     ) as ranked_users
+        //     WHERE rn = 1
+        // `;
         db.query(query, (err, results) => {
             if (err) {
                 console.error('Error fetching data from user table:', err);
@@ -236,17 +250,22 @@ async function findMatchingAuth0UserByDni(email, dni) {
 }
 
 // Función para actualizar el metadata del usuario en Auth0
-async function updateAuth0UserMetadata(token, userId, crmId, firstName, lastName, birthDate, axxNrodocumento, suscActivas) {
+async function updateAuth0UserMetadata(token, userId, suscActivas) {
     try {
         await axios.patch(`https://${auth0Domain}/api/v2/users/${userId}`, {
+            // user_metadata: {
+            //     crm_id: crmId,
+            //     first_name: firstName,
+            //     last_name: lastName,
+            //     birthday: birthDate,
+            //     taxvat: axxNrodocumento,
+            //     active_subs: suscActivas
+            // }
+            //solo actualizar active_subs en el metadata y no los demas campos
             user_metadata: {
-                crm_id: crmId,
-                first_name: firstName,
-                last_name: lastName,
-                birthday: birthDate,
-                taxvat: axxNrodocumento,
                 active_subs: suscActivas
             }
+            
         }, {
             headers: {
                 Authorization: `Bearer ${token}`
@@ -752,30 +771,31 @@ app.get('/users/update-metadata', async (req, res) => {
                 let auth0User;
                 const usersPromises = results.map((row) => limit(async () => {
                     const email = row.email;
-                    const crmId = row.contact_id;
-                    const firstName = row.first_name;
-                    const lastName = row.last_name;
-                    const birthDate = row.birth_date;
-                    const axxNrodocumento = row.axx_nrodocumento;
+                    // const crmId = row.contact_id;
+                    // const firstName = row.first_name;
+                    // const lastName = row.last_name;
+                    // const birthDate = row.birth_date;
+                    // const axxNrodocumento = row.axx_nrodocumento;
                     const suscActivas = row.q_susc_activas;
                     // Intentar primero buscar por email
-                    // let auth0User = await getAuth0UserByEmail(token, email?.toLowerCase());
+                    let auth0User = await getAuth0UserByEmail(token, email?.toLowerCase());
 
                     // Si no encuentra por email, buscar por DNI
                     // if (!auth0User) {
                     // console.log(`No user found with email: ${email}. Trying with DNI: ${axxNrodocumento}`);
-                    auth0User = await getAuth0UserByDNI(token, axxNrodocumento);
+                    // auth0User = await getAuth0UserByDNI(token, axxNrodocumento);
                     // }
-                    console.log('Auth0 user by dni updated:', auth0User[0].user_id);
+                    console.log ('Auth0 user by email updated:', auth0User);
+                    // console.log('Auth0 user by dni updated:', auth0User[0].user_id);
                     if (auth0User) {
                         await updateAuth0UserMetadata(
                             token,
-                            auth0User[0].user_id,
-                            crmId,
-                            firstName,
-                            lastName,
-                            birthDate,
-                            axxNrodocumento,
+                            auth0User.user_id,
+                            // crmId,
+                            // firstName,
+                            // lastName,
+                            // birthDate,
+                            // axxNrodocumento,
                             suscActivas
                         );
                         count++;
