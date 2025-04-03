@@ -86,13 +86,26 @@ async function getAuth0UserByEmail(token, email) {
 // Buscar usuario en Auth0 por DNI u otro dato en los metadatos
 async function getAuth0UserByDNI(token, dni) {
   try {
-    const response = await axios.get(`https://${auth0Domain}/api/v2/users`, {
+    console.log("dni", dni);
+    const response = await axios.get(`https://${auth0Domain}/api/v2/users?q=user_metadata.taxvat:("${dni}")&search_engine=v3`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
-      params: {
-        q: `user_metadata.taxvat:"${dni}"`, // Reemplaza "dni" con el nombre real que uses en los metadatos
-        search_engine: "v3", // Uso del motor de búsqueda correcto
+    });
+
+    // console.log("Auth0 user by DNI:", response.data);
+    return response.data; // Retorna el primer usuario encontrado por DNI
+  } catch (error) {
+    console.error("Error getting Auth0 user by DNI:", error);
+  }
+}
+
+// Buscar usuario en Auth0 por CRM ID u otro dato en los metadatos
+async function getAuth0UserByCRMID(token, crm_id) {
+  try {
+    const response = await axios.get(`https://${auth0Domain}/api/v2/users?q=user_metadata.crm_id:("${crm_id.toLowerCase()}"OR"${crm_id.toUpperCase()}")&search_engine=v3`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
       },
     });
 
@@ -385,4 +398,5 @@ export {
   updateAuth0UserMetadataBirthday,
   shouldConvertBirthday,
   convertBirthday,
+  getAuth0UserByCRMID
 };

@@ -34,7 +34,7 @@ async function updateVtexUserData(user_id_ecommerce, barricaContactId) {
         },
       }
     );
-    console.log("Vtex response:", response);
+    // console.log("Vtex response:", response);
     return response;
   } catch (error) {
     console.error("Error update Vtex data;", error);
