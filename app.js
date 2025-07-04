@@ -6,28 +6,12 @@ import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
 import pLimit from "p-limit";
-import {
-  getAllUsersByUniqueEmailAndStatusActive,
-  getAuth0UserByDNI,
-  getAuth0Token,
-  getAuth0UserByEmail,
-  getGender,
-  findMatchingAuth0User,
-  findMatchingAuth0UserOnlyByDni,
-  updateAuth0UserMetadataGender,
-  deleteUserInAuth0,
-  convertBirthday,
-  shouldConvertBirthday,
-  updateAuth0UserMetadataContactId,
-} from "./utils/auth0-mitgration.mjs";
 import clearRoutes from "./routes/routes-clear.js";
 import createRoutes from "./routes/routes-create.js";
 import uploadRoutes from "./routes/routes-upload.js";
 import updateRoutes from "./routes/routes-update.js";
 import deleteRoutes from "./routes/routes-delete.js";
-
-import { getVtexUserData, updateVtexUserData } from "./utils/vtex-api-service.mjs";
-
+import massiveOperations  from "./routes/routes-massive-operations.js";
 // Cargar variables de entorno desde el archivo .env
 dotenv.config();
 const app = express();
@@ -78,6 +62,7 @@ app.use(createRoutes);
 app.use(uploadRoutes);
 app.use(updateRoutes);
 app.use(deleteRoutes);
+app.use(massiveOperations);
 
 // Iniciar el servidor
 app.listen(port, () => {

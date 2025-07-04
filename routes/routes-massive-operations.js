@@ -3,6 +3,9 @@ import { getAuth0Token, getAuth0UserByEmail, deleteUserInAuth0, findMatchingAuth
 import pLimit from "p-limit";
 import mysql from "mysql";
 import dotenv from "dotenv";
+// Requerir el módulo fs para guardar el archivo
+import fs from "fs";
+
 
 dotenv.config();
 
@@ -522,5 +525,103 @@ router.get("/users", (req, res) => {
     console.log('Logs ordenados:', sortedLogs);
     res.json(sortedLogs);
   });
+  
+
+  //Ruta generador de objeto para testing state machine aws crear envios en strapi
+router.get("/generate-orders", (req, res) => {
+    // Función para generar orderId secuenciales
+function generateOrderId(index) {
+  const num = index;
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let suffix = '';
+  let remaining = num;
+  
+  for (let i = 0; i < 4; i++) {
+    const pos = remaining % 26;
+    suffix = letters.charAt(pos) + suffix;
+    remaining = Math.floor(remaining / 26);
+  }
+  
+  return `PED-${String(index + 1).padStart(6, '0')}-${suffix.padStart(4, 'A')}`;
+}
+
+// Objeto base para todas las órdenes
+const baseOrder = {
+  "crmIdLN": "234234sfsdfsdf21313123",
+  "name": "Ezequiel",
+  "lastName": "Ramirez",
+  "dni": "28280824",
+  "email": "ezequielram@gmail.com",
+  "phoneNumber": "1154547777",
+  "lastDeliveryStatus": "En proceso",
+  "lastDeliveryStatusDate": "2025-05-14T03:00:00.000Z",
+  "trackingNumber": "e2423423432",
+  "carrier": "Fleet",
+  "dispatchStatus": "Pendiente de preparación",
+  "sku": "2423432656566",
+  "productName": "Vino manchado",
+  "weigh": 2,
+  "height": 323,
+  "width": 22,
+  "depth": 3,
+  "declaredValue": 434,
+  "orderType": "Pedido",
+  "campaign": "423423423423434",
+  "orderCreatedAt": "2025-05-08T03:00:00.000Z",
+  "province": "Buenos Aires",
+  "city": "HURLINGHAM",
+  "postalCode": "1686",
+  "street": "ACHALA",
+  "streetNumber": "1077",
+  "floor": null,
+  "apartment": null,
+  "observations": null,
+  "isPriority": false,
+  "sapOrderId": "sdfsd324234",
+  "sapDeliveryId": "fsdfsdf32423423"
+};
+
+// Generar 500 órdenes
+const orders = [];
+for (let i = 0; i < 200; i++) {
+  orders.push({
+    ...baseOrder,
+    orderId: generateOrderId(i)
+  });
+}
+
+// Crear el objeto final con la propiedad data
+const ordersData = { data: orders };
+
+// Convertir a formato JSON con indentación
+const jsonData = JSON.stringify(ordersData, null, 2);
+
+// Crear contenido del archivo JS
+const fileContent = `// Archivo generado automáticamente
+const ordersData = ${jsonData};
+
+// Para usar los datos:
+// console.log(ordersData.data[0]); // Primera orden
+// console.log(ordersData.data.length); // Total de órdenes (500)
+
+module.exports = ordersData;`;
+
+
+
+// Guardar en archivo orders.js
+fs.writeFile('orders.js', fileContent, (err) => {
+  if (err) {
+    console.error('Error al guardar el archivo:', err);
+  } else {
+    console.log('Archivo orders.js generado exitosamente!');
+    console.log('Total de órdenes generadas:', orders.length);
+    console.log('Primer orderId:', orders[0].orderId);
+    console.log('Último orderId:', orders[orders.length - 1].orderId);
+  }
+});
+    res.json('Se ha generado el archivo orders.js con 200 órdenes.');
+  });
+
+
 
 export default router;

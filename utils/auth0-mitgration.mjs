@@ -69,6 +69,7 @@ async function getAuth0UserByEmail(token, email) {
       `https://${auth0Domain}/api/v2/users-by-email`,
       {
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         params: {

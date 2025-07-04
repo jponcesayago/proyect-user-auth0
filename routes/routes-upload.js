@@ -55,7 +55,7 @@ router.post(
       // Leer el contenido del archivo
       const data = fs.readFileSync(filePath, "utf8");
       // Expresión regular para encontrar los DNI en el formato "dni=11788802"
-      const regex_dni = /dni=(\d+)/;
+      const regex_dni = /DNI=(\d+)/;
 
       // Expresión regular para encontrar las líneas que contienen el patrón
       const regex_contact_id =
@@ -69,14 +69,17 @@ router.post(
 
       // Recorrer cada línea del archivo
       for (const line of lines) {
+        // console.log('Line:', line);
         // Buscar el DNI en la línea actual
         const dniMatch = line.match(regex_dni);
+        // console.log('DNI Match:', dniMatch);
         if (dniMatch) {
           currentDni = dniMatch[1]; // Almacenar el DNI encontrado
         }
         // console.log("DNI:", currentDni);
         // Buscar el contact_id en la línea actual
         const contactIdMatch = line.match(regex_contact_id);
+        // console.log('ContactId Match:', contactIdMatch);
         if (contactIdMatch) {
           currentContactId = contactIdMatch[1]; // Almacenar el contact_id encontrado
         }
@@ -88,11 +91,12 @@ router.post(
         }
       }
 
-      console.log("ContactIds:", results);
-
+      // console.log("ContactIds:", results);
+      console.log("ContactIds length:", results.length);
+      
       for (const row of results) {
         const { dni, contact_id } = row;
-        console.log("Row:", row);
+        // console.log("Row:", row);
         // Insertar los datos en la tabla merged_users
         const query = `INSERT INTO merged_users (ContactId, axx_nrodocumento ) VALUES (?, ?)`;
 
